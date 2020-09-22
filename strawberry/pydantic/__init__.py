@@ -1,3 +1,5 @@
+import dataclasses
+from dataclasses import dataclass
 from typing import List, Optional, Type, cast
 
 from pydantic import BaseModel
@@ -29,7 +31,7 @@ def resolve_type(field: ModelField) -> Type:
 
 
 def type(
-    model: BaseModel = None,
+    model: Type[BaseModel],
     *,
     name: str = None,
     is_input: bool = False,
@@ -38,9 +40,11 @@ def type(
     federation: Optional[FederationTypeParams] = None,
 ):
     def wrap(cls):
-        model._strawberry_type = cls
 
         fields = model.__fields__
+
+        print(fields)
+        print(model.__annotations__)
 
         base_fields: List[FieldDefinition] = []
 
@@ -55,14 +59,34 @@ def type(
                 )
             )
 
-        return _process_type(
+        # print(base_fields)
+
+        cls = dataclasses.make_dataclass(
+            cls.__name__, [(field.name, field.type) for field in base_fields]
+        )
+
+        _process_type(
             cls,
             name=name,
             is_input=is_input,
             is_interface=is_interface,
             description=description,
             federation=federation,
-            _base_fields=base_fields,
+            # _base_fields=base_fields,
         )
+
+        model._strawberry_type = cls
+        model._type_definition = cls._type_definition
+
+        def from_pydantic(instance: model, **kwargs) -> model:
+            instance_kwargs = instance.dict()
+
+            # TODO: convert nested data
+
+            return model(**{**instance_kwargs, **kwargs})
+
+        model.from_pydantic = staticmethod(from_pydantic)
+
+        return cls
 
     return wrap
